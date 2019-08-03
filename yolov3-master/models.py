@@ -13,6 +13,11 @@ def create_modules(module_defs):
     module_list = nn.ModuleList()
     yolo_index = -1
 
+    #####修改部分开始#####
+    zsd_index = -1
+    #####修改部分结束#####
+    #####修改时间2019/8/3修改者jcy#####
+
     for i, module_def in enumerate(module_defs):
         modules = nn.Sequential()
 
@@ -65,6 +70,7 @@ def create_modules(module_defs):
             img_size = hyperparams['height']
             # Define detection layer
             modules.add_module('yolo_%d' % i, YOLOLayer(anchors, nc, img_size, yolo_index))
+        
         ######修改部分开始#####
         elif module_def['type'] == 'zsd':
             zsd_index += 1
@@ -76,7 +82,7 @@ def create_modules(module_defs):
             nc = int(module_def['classes'])  # number of classes
             img_size = hyperparams['height']
             # Define detection layer
-            modules.add_module('zsd_%d' % i, ZSDLayer(anchors, nc, img_size, yolo_index))
+            modules.add_module('zsd_%d' % i, ZSDLayer(anchors, nc, img_size, zsd_index))
         #####修改部分结束#####
         #####修改时间2019/8/3修改者jcy#####
 
@@ -169,7 +175,7 @@ class YOLOLayer(nn.Module):
 
 #####修改部分开始#####
 class ZSDLayer(nn.Module):
-    def __init__(self, anchors, nc, img_size, yolo_index):
+    def __init__(self, anchors, nc, img_size, zsd_index):
         super(ZSDLayer, self).__init__()
 
         self.anchors = torch.Tensor(anchors)
@@ -179,29 +185,34 @@ class ZSDLayer(nn.Module):
         self.ny = 0  # initialize number of y gridpoints
 
     def forward(self, p, img_size, var=None):
-        bs, ny, nx = p.shape[0], p.shape[-2], p.shape[-1]
+        bs, ny, nx = p.shape[0], p.shape[-2], p.shape[-1] # p.shape = (bs, 552, 13, 13)
         if (self.nx, self.ny) != (nx, ny):
             create_grids(self, img_size, (nx, ny), p.device)
 
-        # p.view(bs, 255, 13, 13) -- > (bs, 3, 13, 13, 85)  # (bs, anchors, grid, grid, classes + xywh)
-        p = p.view(bs, self.na, self.nc + 5, self.ny, self.nx).permute(0, 1, 3, 4, 2).contiguous()  # prediction
+        category_prediction = p[:, 252:, :, :] # (bs, 300, 13, 13)
+        p = p[:, :252, :, :]
+
+        # p.view(bs, 252, 13, 13) -- > (bs, 3, 13, 13, 84)  # (bs, anchors, grid, grid, xywh + object_proposal)
+        p = p.view(bs, self.na, self.nc + 4, self.ny, self.nx).permute(0, 1, 3, 4, 2).contiguous()  # prediction
 
         if self.training:
-            return p
+            return p, category_prediction
         else:  # inference
             # s = 1.5  # scale_xy  (pxy = pxy * s - (s - 1) / 2)
             io = p.clone()  # inference output
             io[..., 0:2] = torch.sigmoid(io[..., 0:2]) + self.grid_xy  # xy
             io[..., 2:4] = torch.exp(io[..., 2:4]) * self.anchor_wh  # wh yolo method
             # io[..., 2:4] = ((torch.sigmoid(io[..., 2:4]) * 2) ** 3) * self.anchor_wh  # wh power method
-            io[..., 4:] = torch.sigmoid(io[..., 4:])  # p_conf, p_cls
+            io[..., 4:] = torch.sigmoid(io[..., 4:])  # object_proposal
             # io[..., 5:] = F.softmax(io[..., 5:], dim=4)  # p_cls
             io[..., :4] *= self.stride
             if self.nc == 1:
                 io[..., 5] = 1  # single-class model https://github.com/ultralytics/yolov3/issues/235
+            
+            #TODO process category_prediction
 
-            # reshape from [1, 3, 13, 13, 85] to [1, 507, 85]
-            return io.view(bs, -1, 5 + self.nc), p
+            # reshape from [1, 3, 13, 13, 84] to [1, 507, 84]
+            return io.view(bs, -1, 4 + self.nc), p, category_prediction
 #####修改部分结束#####
 #####修改时间2019/8/3修改者jcy#####
 
