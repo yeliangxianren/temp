@@ -277,8 +277,61 @@ def wh_iou(box1, box2):
 
     return inter_area / union_area  # iou
 
+#####原代码开始#####
+# def compute_loss(p, targets, model, giou_loss=True):  # predictions, targets, model
+#     ft = torch.cuda.FloatTensor if p[0].is_cuda else torch.Tensor
+#     lxy, lwh, lcls, lobj = ft([0]), ft([0]), ft([0]), ft([0])
+#     txy, twh, tcls, tbox, indices, anchor_vec = build_targets(model, targets)
+#     h = model.hyp  # hyperparameters
 
-def compute_loss(p, targets, model, giou_loss=True):  # predictions, targets, model
+#     # Define criteria
+#     MSE = nn.MSELoss()
+#     BCEcls = nn.BCEWithLogitsLoss(pos_weight=ft([h['cls_pw']]))
+#     BCEobj = nn.BCEWithLogitsLoss(pos_weight=ft([h['obj_pw']]))
+#     # CE = nn.CrossEntropyLoss()  # (weight=model.class_weights)
+
+#     # Compute losses
+#     bs = p[0].shape[0]  # batch size
+#     k = bs / 64  # loss gain
+#     for i, pi0 in enumerate(p):  # layer i predictions, i
+#         b, a, gj, gi = indices[i]  # image, anchor, gridy, gridx
+#         tobj = torch.zeros_like(pi0[..., 0])  # target obj
+
+#         # Compute losses
+#         nb = len(b)
+#         if nb:  # number of targets
+#             pi = pi0[b, a, gj, gi]  # predictions closest to anchors
+#             tobj[b, a, gj, gi] = 1.0  # obj
+#             # pi[..., 2:4] = torch.sigmoid(pi[..., 2:4])  # wh power loss (uncomment)
+
+#             # s = 1.5  # scale_xy
+#             pxy = torch.sigmoid(pi[..., 0:2])  # * s - (s - 1) / 2
+#             if giou_loss:
+#                 pbox = torch.cat((pxy, torch.exp(pi[..., 2:4]) * anchor_vec[i]), 1)  # predicted
+#                 giou = bbox_iou(pbox.t(), tbox[i], x1y1x2y2=False, GIoU=True)  # giou computation
+#                 lxy += (k * h['giou']) * (1.0 - giou).mean()  # giou loss
+#             else:
+#                 lxy += (k * h['xy']) * MSE(pxy, txy[i])  # xy loss
+#                 lwh += (k * h['wh']) * MSE(pi[..., 2:4], twh[i])  # wh yolo loss
+
+#             tclsm = torch.zeros_like(pi[..., 5:])
+#             tclsm[range(nb), tcls[i]] = 1.0
+#             lcls += (k * h['cls']) * BCEcls(pi[..., 5:], tclsm)  # cls loss (BCE)
+#             # lcls += (k * h['cls']) * CE(pi[..., 5:], tcls[i])  # cls loss (CE)
+
+#             # Append targets to text file
+#             # with open('targets.txt', 'a') as file:
+#             #     [file.write('%11.5g ' * 4 % tuple(x) + '\n') for x in torch.cat((txy[i], twh[i]), 1)]
+
+#         lobj += (k * h['obj']) * BCEobj(pi0[..., 4], tobj)  # obj loss
+#     loss = lxy + lwh + lobj + lcls
+
+#     return loss, torch.cat((lxy, lwh, lobj, lcls, loss)).detach()
+#####原代码结束#####
+
+#####修改部分开始#####
+def compute_loss(p, category_prediction, targets, model, giou_loss=True):  # predictions, category_prediction, targets, model
+    # p: (bs, 3, 13, 13, 84) category_prediction: (bs, 300, 13, 13)
     ft = torch.cuda.FloatTensor if p[0].is_cuda else torch.Tensor
     lxy, lwh, lcls, lobj = ft([0]), ft([0]), ft([0]), ft([0])
     txy, twh, tcls, tbox, indices, anchor_vec = build_targets(model, targets)
@@ -327,6 +380,10 @@ def compute_loss(p, targets, model, giou_loss=True):  # predictions, targets, mo
     loss = lxy + lwh + lobj + lcls
 
     return loss, torch.cat((lxy, lwh, lobj, lcls, loss)).detach()
+
+#####修改部分结束#####
+#####修改时间2019/8/3修改人jcy#####
+
 
 
 def build_targets(model, targets):

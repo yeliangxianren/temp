@@ -251,10 +251,21 @@ def train(cfg,
             #         x['weight_decay'] = hyp['weight_decay'] * g
 
             # Run model
-            pred = model(imgs)
 
-            # Compute loss
-            loss, loss_items = compute_loss(pred, targets, model, giou_loss=not opt.xywh)
+            #####原代码开始#####
+            # pred = model(imgs)
+            ## Compute loss
+            # loss, loss_items = compute_loss(pred, targets, model, giou_loss=not opt.xywh)
+            #####原代码结束#####
+
+            #####修改部分开始#####
+            pred, category_prediction = model(imgs) # (bs, 3, 13, 13, 84) (bs, 300, 13, 13)
+            
+            loss, loss_items = compute_loss(pred, category_prediction, targets, model, giou_loss=not opt.xywh)
+
+            #####修改部分结束#####
+            #####修改时间2019/8/3修改人jcy#####
+
             if torch.isnan(loss):
                 print('WARNING: nan loss detected, ending training')
                 return results
