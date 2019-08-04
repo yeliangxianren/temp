@@ -330,8 +330,8 @@ def wh_iou(box1, box2):
 #####原代码结束#####
 
 #####修改部分开始#####
-def compute_loss(p, category_prediction, targets, model, giou_loss=True):  # predictions, category_prediction, targets, model
-    # p: (bs, 3, 13, 13, 84) category_prediction: (bs, 300, 13, 13)
+def compute_loss(p, targets, model, giou_loss=True):  # predictions, targets, model
+    # p: [((bs, 3, 13, 13, 84), (bs, 1, 13, 13, 300)), ((bs, 3, 26, 26, 84), (bs, 1, 26, 26, 300)), (...)]
     ft = torch.cuda.FloatTensor if p[0].is_cuda else torch.Tensor
     lxy, lwh, lcls, lobj = ft([0]), ft([0]), ft([0]), ft([0])
     txy, twh, tcls, tbox, indices, anchor_vec = build_targets(model, targets)
@@ -339,14 +339,16 @@ def compute_loss(p, category_prediction, targets, model, giou_loss=True):  # pre
 
     # Define criteria
     MSE = nn.MSELoss()
+    CE = nn.CrossEntropyLoss() # cross entropy
     BCEcls = nn.BCEWithLogitsLoss(pos_weight=ft([h['cls_pw']]))
     BCEobj = nn.BCEWithLogitsLoss(pos_weight=ft([h['obj_pw']]))
     # CE = nn.CrossEntropyLoss()  # (weight=model.class_weights)
 
     # Compute losses
-    bs = p[0].shape[0]  # batch size
+    bs = p[0][0][0].shape[0]  # batch size
     k = bs / 64  # loss gain
-    for i, pi0 in enumerate(p):  # layer i predictions, i
+    for i, pi1 in enumerate(p):  # layer i predictions, i
+        pi0 = pi1[0]
         b, a, gj, gi = indices[i]  # image, anchor, gridy, gridx
         tobj = torch.zeros_like(pi0[..., 0])  # target obj
 
@@ -375,7 +377,9 @@ def compute_loss(p, category_prediction, targets, model, giou_loss=True):  # pre
             # Append targets to text file
             # with open('targets.txt', 'a') as file:
             #     [file.write('%11.5g ' * 4 % tuple(x) + '\n') for x in torch.cat((txy[i], twh[i]), 1)]
-
+        pi_obj = pi1[1] # (bs, 1, 13, 13, 300)
+        obj_prob = torch.sigmoid(pi_obj[...])
+        
         lobj += (k * h['obj']) * BCEobj(pi0[..., 4], tobj)  # obj loss
     loss = lxy + lwh + lobj + lcls
 

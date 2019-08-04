@@ -194,6 +194,7 @@ class ZSDLayer(nn.Module):
 
         # p.view(bs, 252, 13, 13) -- > (bs, 3, 13, 13, 84)  # (bs, anchors, grid, grid, xywh + object_proposal)
         p = p.view(bs, self.na, self.nc + 4, self.ny, self.nx).permute(0, 1, 3, 4, 2).contiguous()  # prediction
+        category_prediction = category_prediction.view(bs, 1, 300, self.ny, self.nx).permute(0, 1, 3, 4, 2).contiguous()
 
         if self.training:
             return p, category_prediction
