@@ -229,6 +229,11 @@ class Darknet(nn.Module):
         self.hyperparams, self.module_list = create_modules(self.module_defs)
         self.yolo_layers = get_yolo_layers(self)
 
+        #####原代码开始#####
+        self.zsd_layers = get_zsd_layers(self)
+        #####原代码结束#####
+        #####修改时间2019/8/4修改者jcy#####
+
         # Darknet Header https://github.com/AlexeyAB/darknet/issues/2914#issuecomment-496675346
         self.version = np.array([0, 2, 5], dtype=np.int32)  # (int32) version info: major, minor, revision
         self.seen = np.array([0], dtype=np.int64)  # (int64) number of images seen during training
@@ -254,6 +259,14 @@ class Darknet(nn.Module):
             elif mtype == 'yolo':
                 x = module[0](x, img_size)
                 output.append(x)
+            
+            #####修改部分开始#####
+            elif mtype == 'zsd':
+                x = module[0](x, img_size)
+                output.append(x)
+            #####修改部分结束#####
+            #####修改时间2019/8/3修改者jcy#####
+
             layer_outputs.append(x)
 
         if self.training:
@@ -285,6 +298,13 @@ class Darknet(nn.Module):
 def get_yolo_layers(model):
     a = [module_def['type'] == 'yolo' for module_def in model.module_defs]
     return [i for i, x in enumerate(a) if x]  # [82, 94, 106] for yolov3
+
+#####原代码开始#####
+def get_zsd_layers(model):
+    a = [module_def['type'] == 'zsd' for module_def in model.module_defs]
+    return [i for i, x in enumerate(a) if x]  # [82, 94, 106] for zsd
+#####原代码结束#####
+#####修改时间2019/8/4修改者jcy#####
 
 
 def create_grids(self, img_size=416, ng=(13, 13), device='cpu'):

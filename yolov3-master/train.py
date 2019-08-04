@@ -252,19 +252,9 @@ def train(cfg,
 
             # Run model
 
-            #####原代码开始#####
-            # pred = model(imgs)
-            ## Compute loss
-            # loss, loss_items = compute_loss(pred, targets, model, giou_loss=not opt.xywh)
-            #####原代码结束#####
-
-            #####修改部分开始#####
-            pred = model(imgs) # [((bs, 3, 13, 13, 84), (bs, 1, 13, 13, 300)), ((bs, 3, 26, 26, 84), (bs, 1, 26, 26, 300)), (...)]
-            
+            pred = model(imgs)
+            # Compute loss
             loss, loss_items = compute_loss(pred, targets, model, giou_loss=not opt.xywh)
-
-            #####修改部分结束#####
-            #####修改时间2019/8/3修改人jcy#####
 
             if torch.isnan(loss):
                 print('WARNING: nan loss detected, ending training')

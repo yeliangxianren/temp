@@ -332,7 +332,7 @@ def wh_iou(box1, box2):
 #####修改部分开始#####
 def compute_loss(p, targets, model, giou_loss=True):  # predictions, targets, model
     # p: [((bs, 3, 13, 13, 84), (bs, 1, 13, 13, 300)), ((bs, 3, 26, 26, 84), (bs, 1, 26, 26, 300)), (...)]
-    ft = torch.cuda.FloatTensor if p[0].is_cuda else torch.Tensor
+    ft = torch.cuda.FloatTensor if p[0][0].is_cuda else torch.Tensor
     lxy, lwh, lcls, lobj = ft([0]), ft([0]), ft([0]), ft([0])
     txy, twh, tcls, tbox, indices, anchor_vec = build_targets(model, targets)
     h = model.hyp  # hyperparameters
@@ -369,18 +369,18 @@ def compute_loss(p, targets, model, giou_loss=True):  # predictions, targets, mo
                 lxy += (k * h['xy']) * MSE(pxy, txy[i])  # xy loss
                 lwh += (k * h['wh']) * MSE(pi[..., 2:4], twh[i])  # wh yolo loss
 
-            tclsm = torch.zeros_like(pi[..., 5:])
-            tclsm[range(nb), tcls[i]] = 1.0
-            lcls += (k * h['cls']) * BCEcls(pi[..., 5:], tclsm)  # cls loss (BCE)
+            # tclsm = torch.zeros_like(pi[..., 5:])
+            # tclsm[range(nb), tcls[i]] = 1.0
+            # lcls += (k * h['cls']) * BCEcls(pi[..., 5:], tclsm)  # cls loss (BCE)
             # lcls += (k * h['cls']) * CE(pi[..., 5:], tcls[i])  # cls loss (CE)
 
             # Append targets to text file
             # with open('targets.txt', 'a') as file:
             #     [file.write('%11.5g ' * 4 % tuple(x) + '\n') for x in torch.cat((txy[i], twh[i]), 1)]
-        pi_obj = pi1[1] # (bs, 1, 13, 13, 300)
-        obj_prob = torch.sigmoid(pi_obj[...])
+        # pi_obj = pi1[1] # (bs, 1, 13, 13, 300)
+        # obj_prob = torch.sigmoid(pi_obj[...])
         
-        lobj += (k * h['obj']) * BCEobj(pi0[..., 4], tobj)  # obj loss
+        # lobj += (k * h['obj']) * BCEobj(pi0[..., 4], tobj)  # obj loss
     loss = lxy + lwh + lobj + lcls
 
     return loss, torch.cat((lxy, lwh, lobj, lcls, loss)).detach()
@@ -389,7 +389,67 @@ def compute_loss(p, targets, model, giou_loss=True):  # predictions, targets, mo
 #####修改时间2019/8/3修改人jcy#####
 
 
+#####原代码开始#####
+# def build_targets(model, targets):
+#     # targets = [image, class, x, y, w, h]
+#     iou_thres = model.hyp['iou_t']  # hyperparameter
+#     if type(model) in (nn.parallel.DataParallel, nn.parallel.DistributedDataParallel):
+#         model = model.module
 
+#     nt = len(targets)
+#     txy, twh, tcls, tbox, indices, anchor_vec = [], [], [], [], [], []
+#     for i in model.yolo_layers:
+#         layer = model.module_list[i][0]
+
+#         # iou of targets-anchors
+#         t, a = targets, []
+#         gwh = t[:, 4:6] * layer.ng
+#         if nt:
+#             iou = torch.stack([wh_iou(x, gwh) for x in layer.anchor_vec], 0)
+
+#             use_best_anchor = False
+#             if use_best_anchor:
+#                 iou, a = iou.max(0)  # best iou and anchor
+#             else:  # use all anchors
+#                 na = len(layer.anchor_vec)  # number of anchors
+#                 a = torch.arange(na).view((-1, 1)).repeat([1, nt]).view(-1)
+#                 t = targets.repeat([na, 1])
+#                 gwh = gwh.repeat([na, 1])
+#                 iou = iou.view(-1)  # use all ious
+
+#             # reject anchors below iou_thres (OPTIONAL, increases P, lowers R)
+#             reject = True
+#             if reject:
+#                 j = iou > iou_thres
+#                 t, a, gwh = t[j], a[j], gwh[j]
+
+#         # Indices
+#         b, c = t[:, :2].long().t()  # target image, class
+#         gxy = t[:, 2:4] * layer.ng  # grid x, y
+#         gi, gj = gxy.long().t()  # grid x, y indices
+#         indices.append((b, a, gj, gi))
+
+#         # XY coordinates
+#         gxy -= gxy.floor()
+#         txy.append(gxy)
+
+#         # GIoU
+#         tbox.append(torch.cat((gxy, gwh), 1))  # xywh (grids)
+#         anchor_vec.append(layer.anchor_vec[a])
+
+#         # Width and height
+#         twh.append(torch.log(gwh / layer.anchor_vec[a]))  # wh yolo method
+#         # twh.append((gwh / layer.anchor_vec[a]) ** (1 / 3) / 2)  # wh power method
+
+#         # Class
+#         tcls.append(c)
+#         if c.shape[0]:
+#             assert c.max() <= layer.nc, 'Target classes exceed model classes'
+
+#     return txy, twh, tcls, tbox, indices, anchor_vec
+#####原代码结束#####
+
+#####修改代码开始#####
 def build_targets(model, targets):
     # targets = [image, class, x, y, w, h]
     iou_thres = model.hyp['iou_t']  # hyperparameter
@@ -398,7 +458,7 @@ def build_targets(model, targets):
 
     nt = len(targets)
     txy, twh, tcls, tbox, indices, anchor_vec = [], [], [], [], [], []
-    for i in model.yolo_layers:
+    for i in model.zsd_layers:
         layer = model.module_list[i][0]
 
         # iou of targets-anchors
@@ -447,7 +507,8 @@ def build_targets(model, targets):
             assert c.max() <= layer.nc, 'Target classes exceed model classes'
 
     return txy, twh, tcls, tbox, indices, anchor_vec
-
+#####修改代码结束#####
+#####修改时间2019/8/4修改者jcy#####
 
 def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.5):
     """
